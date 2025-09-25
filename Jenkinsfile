@@ -35,7 +35,7 @@ pipeline {
                 script {
                     withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                         sh """
-                          echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                          echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
                         """
                     }
                 }
@@ -134,18 +134,24 @@ pipeline {
                         gitUserEmail: 'haris.amjad@hotmail.com'
                     )
 
-                    // Git operations: commit and push safely to the patch branch
+                    // Git operations: fetch, rebase, and safe push
                     sh """
                         git config user.name "Jenkins CI"
                         git config user.email "haris.amjad@hotmail.com"
+                        git remote set-url origin ${GIT_REPO}
+
+                        # Fetch latest remote changes
+                        git fetch origin ${GIT_BRANCH}
+
+                        # Rebase our changes on top of remote branch
+                        git rebase origin/${GIT_BRANCH} || true
 
                         git add kubernetes/*
 
                         git commit -m "Update image tags to ${DOCKER_IMAGE_TAG} [ci skip]" || echo "No changes to commit"
 
-                        git remote set-url origin ${GIT_REPO}
-
-                        git push origin HEAD:${GIT_BRANCH}
+                        # Push safely using force-with-lease
+                        git push origin HEAD:${GIT_BRANCH} --force-with-lease
                     """
                 }
             }
