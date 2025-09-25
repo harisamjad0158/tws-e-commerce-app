@@ -126,7 +126,6 @@ pipeline {
         stage('Update Kubernetes Manifests') {
             steps {
                 script {
-                    // Update manifests via shared library
                     update_k8s_manifests(
                         imageTag: env.DOCKER_IMAGE_TAG,
                         manifestsPath: 'kubernetes',
@@ -135,23 +134,21 @@ pipeline {
                         gitUserEmail: 'haris.amjad@hotmail.com'
                     )
 
-                    // Git commit and push with safe force
+                    // Git operations: safe push
                     sh """
                         git config user.name "Jenkins CI"
                         git config user.email "haris.amjad@hotmail.com"
                         git remote set-url origin ${GIT_REPO}
 
-                        # Fetch remote changes and rebase to avoid conflicts
+                        # Fetch remote changes and rebase
                         git fetch origin
                         git rebase origin/${GIT_BRANCH} || true
 
-                        # Stage updated manifests
                         git add kubernetes/*
 
-                        # Commit changes if any
                         git commit -m "Update image tags to ${DOCKER_IMAGE_TAG} and ensure correct domain [ci skip]" || echo "No changes to commit"
 
-                        # Push safely using force-with-lease
+                        # Force push safely
                         git push origin HEAD:${GIT_BRANCH} --force-with-lease
                     """
                 }
