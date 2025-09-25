@@ -4,12 +4,16 @@ pipeline {
     agent any
     
     environment {
-        // Update the main app image name to match the deployment file
-        DOCKER_IMAGE_NAME = 'trainwithshubham/easyshop-app'
-        DOCKER_MIGRATION_IMAGE_NAME = 'trainwithshubham/easyshop-migration'
-        DOCKER_IMAGE_TAG = "${BUILD_NUMBER}"
-        GITHUB_CREDENTIALS = credentials('github-credentials')
-        GIT_BRANCH = "master"
+        // 🔹 Set DockerHub username as environment variable
+        USERNAME                   = "johncorner158"
+
+        // 🔹 Use USERNAME in image names
+        DOCKER_IMAGE_NAME           = "${env.USERNAME}/easyshop-app"
+        DOCKER_MIGRATION_IMAGE_NAME = "${env.USERNAME}/easyshop-migration"
+
+        DOCKER_IMAGE_TAG            = "${BUILD_NUMBER}"
+        GITHUB_CREDENTIALS          = credentials('github-credentials')
+        GIT_BRANCH                  = "master"
     }
     
     stages {
@@ -70,10 +74,7 @@ pipeline {
         stage('Security Scan with Trivy') {
             steps {
                 script {
-                    // Create directory for results
-                  
                     trivy_scan()
-                    
                 }
             }
         }
@@ -106,7 +107,6 @@ pipeline {
             }
         }
         
-        // Add this new stage
         stage('Update Kubernetes Manifests') {
             steps {
                 script {
@@ -115,8 +115,17 @@ pipeline {
                         manifestsPath: 'kubernetes',
                         gitCredentials: 'github-credentials',
                         gitUserName: 'Jenkins CI',
-                        gitUserEmail: 'shubhamnath5@gmail.com'
+                        gitUserEmail: 'alipeco90@gmail.com'   // 🔹 updated email
                     )
+                }
+            }
+        }
+
+        stage('Verify Image Names') {
+            steps {
+                script {
+                    echo "Main App Image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
+                    echo "Migration Image: ${env.DOCKER_MIGRATION_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
                 }
             }
         }
