@@ -9,7 +9,7 @@ pipeline {
         DOCKER_MIGRATION_IMAGE_NAME = "${DOCKERHUB_USERNAME}/easyshop-migration"
         DOCKER_IMAGE_TAG = "${BUILD_NUMBER}"
         GITHUB_CREDENTIALS = credentials('github-credentials')
-        GIT_BRANCH = "ci-update" // changed branch
+        GIT_BRANCH = "ci-update"
         GIT_REPO = "https://github.com/LondheShubham153/tws-e-commerce-app.git"
     }
 
@@ -134,13 +134,12 @@ pipeline {
                         gitUserEmail: 'haris.amjad@hotmail.com'
                     )
 
-                    // Git operations: push to separate branch safely
                     sh """
                         git config user.name "Jenkins CI"
                         git config user.email "haris.amjad@hotmail.com"
                         git remote set-url origin ${GIT_REPO}
 
-                        # Fetch remote branch or create if it doesn't exist
+                        # Fetch remote ci-update branch or create if missing
                         git fetch origin ${GIT_BRANCH} || true
                         git checkout -B ${GIT_BRANCH} origin/${GIT_BRANCH} || git checkout -b ${GIT_BRANCH}
 
@@ -148,6 +147,7 @@ pipeline {
 
                         git commit -m "Update image tags to ${DOCKER_IMAGE_TAG} and ensure correct domain [ci skip]" || echo "No changes to commit"
 
+                        # Safe push to ci-update branch
                         git push origin ${GIT_BRANCH} --force-with-lease
                     """
                 }
