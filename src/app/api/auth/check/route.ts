@@ -3,6 +3,9 @@ import { isAuthenticated } from "@/lib/auth/utils";
 import User from "@/lib/models/user";
 import dbConnect from "@/lib/db";
 
+// Mark this route as dynamic to allow headers/cookies usage
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     console.log('Checking authentication status');
