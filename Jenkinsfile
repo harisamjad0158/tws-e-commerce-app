@@ -2,20 +2,17 @@
 
 pipeline {
     agent any
-    
+
     environment {
-        // 🔹 Set DockerHub username as environment variable
-        USERNAME                   = "johncorner158"
-
-        // 🔹 Use USERNAME in image names
-        DOCKER_IMAGE_NAME           = "${env.USERNAME}/easyshop-app"
-        DOCKER_MIGRATION_IMAGE_NAME = "${env.USERNAME}/easyshop-migration"
-
-        DOCKER_IMAGE_TAG            = "${BUILD_NUMBER}"
-        GITHUB_CREDENTIALS          = credentials('github-credentials')
-        GIT_BRANCH                  = "master"
+        DOCKERHUB_USERNAME = 'johncorner158'
+        DOCKER_IMAGE_NAME = "${DOCKERHUB_USERNAME}/easyshop-app"
+        DOCKER_MIGRATION_IMAGE_NAME = "${DOCKERHUB_USERNAME}/easyshop-migration"
+        DOCKER_IMAGE_TAG = "${BUILD_NUMBER}"
+        GITHUB_CREDENTIALS = credentials('github-credentials')
+        GIT_BRANCH = "master"
+        GIT_REPO = "https://github.com/LondheShubham153/tws-e-commerce-app.git"
     }
-    
+
     stages {
         stage('Cleanup Workspace') {
             steps {
@@ -24,15 +21,15 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Clone Repository') {
             steps {
                 script {
-                    clone("https://github.com/LondheShubham153/tws-e-commerce-app.git","master")
+                    clone(env.GIT_REPO, env.GIT_BRANCH)
                 }
             }
         }
-        
+
         stage('Build Docker Images') {
             parallel {
                 stage('Build Main App Image') {
@@ -47,7 +44,7 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('Build Migration Image') {
                     steps {
                         script {
@@ -62,15 +59,22 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Run Unit Tests') {
             steps {
                 script {
-                    run_tests()
+                    docker.image('node:18.17.0').inside('-u root') {
+                        sh '''
+                            npm config set cache $PWD/.npm-cache --global
+                            npm install --unsafe-perm
+                            npm run lint
+                            npm run build
+                        '''
+                    }
                 }
             }
         }
-        
+
         stage('Security Scan with Trivy') {
             steps {
                 script {
@@ -78,7 +82,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Push Docker Images') {
             parallel {
                 stage('Push Main App Image') {
@@ -92,7 +96,7 @@ pipeline {
                         }
                     }
                 }
-                
+
                 stage('Push Migration Image') {
                     steps {
                         script {
@@ -106,7 +110,7 @@ pipeline {
                 }
             }
         }
-        
+
         stage('Update Kubernetes Manifests') {
             steps {
                 script {
@@ -115,17 +119,8 @@ pipeline {
                         manifestsPath: 'kubernetes',
                         gitCredentials: 'github-credentials',
                         gitUserName: 'Jenkins CI',
-                        gitUserEmail: 'alipeco90@gmail.com'   // 🔹 updated email
+                        gitUserEmail: 'haris.amjad@hotmail.com'
                     )
-                }
-            }
-        }
-
-        stage('Verify Image Names') {
-            steps {
-                script {
-                    echo "Main App Image: ${env.DOCKER_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
-                    echo "Migration Image: ${env.DOCKER_MIGRATION_IMAGE_NAME}:${env.DOCKER_IMAGE_TAG}"
                 }
             }
         }
