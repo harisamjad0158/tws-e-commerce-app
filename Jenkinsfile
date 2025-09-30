@@ -8,7 +8,6 @@ pipeline {
         DOCKER_IMAGE_NAME = "${DOCKERHUB_USERNAME}/easyshop-app"
         DOCKER_MIGRATION_IMAGE_NAME = "${DOCKERHUB_USERNAME}/easyshop-migration"
         DOCKER_IMAGE_TAG = "${BUILD_NUMBER}"
-        GITHUB_CREDENTIALS = credentials('github-credentials')
         GIT_BRANCH = "harisamjad0158-patch-1"
         GIT_REPO = "https://github.com/harisamjad0158/tws-e-commerce-app.git"
     }
@@ -24,20 +23,14 @@ pipeline {
 
         stage('Clone Repository') {
             steps {
-                script {
-                    clone(env.GIT_REPO, env.GIT_BRANCH)
-                }
+                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
             }
         }
 
         stage('Docker Login') {
             steps {
-                script {
-                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh """
-                          echo \$DOCKER_PASS | docker login -u \$DOCKER_USER --password-stdin
-                        """
-                    }
+                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
                 }
             }
         }
@@ -125,34 +118,32 @@ pipeline {
 
         stage('Update Kubernetes Manifests') {
             steps {
-                script {
-                    update_k8s_manifests(
-                        imageTag: env.DOCKER_IMAGE_TAG,
-                        manifestsPath: 'kubernetes',
-                        gitCredentials: 'github-credentials',
-                        gitUserName: 'Jenkins CI',
-                        gitUserEmail: 'haris.amjad@hotmail.com'
-                    )
+                withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
+                    script {
+                        update_k8s_manifests(
+                            imageTag: env.DOCKER_IMAGE_TAG,
+                            manifestsPath: 'kubernetes',
+                            gitCredentials: 'github-credentials',
+                            gitUserName: 'Jenkins CI',
+                            gitUserEmail: 'haris.amjad@hotmail.com'
+                        )
 
-                    // Git operations: fetch, rebase, and safe push
-                    sh """
-                        git config user.name "Jenkins CI"
-                        git config user.email "haris.amjad@hotmail.com"
-                        git remote set-url origin ${GIT_REPO}
+                        sh """
+                            git config user.name "Jenkins CI"
+                            git config user.email "haris.amjad@hotmail.com"
 
-                        # Fetch latest remote changes
-                        git fetch origin ${GIT_BRANCH}
+                            # Set remote URL with credentials
+                            git remote set-url origin https://$GIT_USERNAME:$GIT_PASSWORD@github.com/harisamjad0158/tws-e-commerce-app.git
 
-                        # Rebase our changes on top of remote branch
-                        git rebase origin/${GIT_BRANCH} || true
+                            git fetch origin ${GIT_BRANCH}
+                            git rebase origin/${GIT_BRANCH} || true
 
-                        git add kubernetes/*
+                            git add kubernetes/*
+                            git commit -m "Update image tags to ${DOCKER_IMAGE_TAG} [ci skip]" || echo "No changes to commit"
 
-                        git commit -m "Update image tags to ${DOCKER_IMAGE_TAG} [ci skip]" || echo "No changes to commit"
-
-                        # Push safely using force-with-lease
-                        git push origin HEAD:${GIT_BRANCH} --force-with-lease
-                    """
+                            git push origin HEAD:${GIT_BRANCH} --force-with-lease
+                        """
+                    }
                 }
             }
         }
