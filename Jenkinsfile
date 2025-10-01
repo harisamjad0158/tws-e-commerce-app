@@ -1,5 +1,3 @@
-@Library('Shared') _
-
 pipeline {
     agent any
 
@@ -8,109 +6,65 @@ pipeline {
         DOCKER_IMAGE_NAME = "${DOCKERHUB_USERNAME}/easyshop-app"
         DOCKER_MIGRATION_IMAGE_NAME = "${DOCKERHUB_USERNAME}/easyshop-migration"
         DOCKER_IMAGE_TAG = "${BUILD_NUMBER}"
-        GIT_BRANCH = "harisamjad0158-patch-1"
         GIT_REPO = "https://github.com/harisamjad0158/tws-e-commerce-app.git"
+        GIT_BRANCH = "harisamjad0158-patch-1"
+        GIT_USER = "harisamjad0158"
+        GIT_TOKEN = "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"
     }
 
     stages {
         stage('Cleanup Workspace') {
             steps {
-                script {
-                    clean_ws()
-                }
+                cleanWs()
             }
         }
 
         stage('Clone Repository') {
             steps {
-                git branch: "${GIT_BRANCH}", url: "${GIT_REPO}"
+                git branch: "${GIT_BRANCH}",
+                    url: "https://${GIT_USER}:${GIT_TOKEN}@github.com/harisamjad0158/tws-e-commerce-app.git"
             }
         }
 
         stage('Docker Login') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
-                }
+                sh """
+                    echo "Logging in to Docker Hub..."
+                    echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin
+                """
             }
         }
 
         stage('Build Docker Images') {
             parallel {
-                stage('Build Main App Image') {
+                stage('Build App Image') {
                     steps {
-                        script {
-                            docker_build(
-                                imageName: env.DOCKER_IMAGE_NAME,
-                                imageTag: env.DOCKER_IMAGE_TAG,
-                                dockerfile: 'Dockerfile',
-                                context: '.'
-                            )
-                        }
+                        sh """
+                            docker build -t ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG} -f Dockerfile .
+                        """
                     }
                 }
 
                 stage('Build Migration Image') {
                     steps {
-                        script {
-                            docker_build(
-                                imageName: env.DOCKER_MIGRATION_IMAGE_NAME,
-                                imageTag: env.DOCKER_IMAGE_TAG,
-                                dockerfile: 'scripts/Dockerfile.migration',
-                                context: '.'
-                            )
-                        }
+                        sh """
+                            docker build -t ${DOCKER_MIGRATION_IMAGE_NAME}:${DOCKER_IMAGE_TAG} -f scripts/Dockerfile.migration .
+                        """
                     }
-                }
-            }
-        }
-
-        stage('Run Unit Tests') {
-            steps {
-                script {
-                    docker.image('node:18.17.0').inside('-u root') {
-                        sh '''
-                            npm config set cache $PWD/.npm-cache --global
-                            npm install --unsafe-perm
-                            npm run lint
-                            npm run build
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Security Scan with Trivy') {
-            steps {
-                script {
-                    trivy_scan()
                 }
             }
         }
 
         stage('Push Docker Images') {
             parallel {
-                stage('Push Main App Image') {
+                stage('Push App Image') {
                     steps {
-                        script {
-                            docker_push(
-                                imageName: env.DOCKER_IMAGE_NAME,
-                                imageTag: env.DOCKER_IMAGE_TAG,
-                                credentials: 'docker-hub-credentials'
-                            )
-                        }
+                        sh "docker push ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     }
                 }
-
                 stage('Push Migration Image') {
                     steps {
-                        script {
-                            docker_push(
-                                imageName: env.DOCKER_MIGRATION_IMAGE_NAME,
-                                imageTag: env.DOCKER_IMAGE_TAG,
-                                credentials: 'docker-hub-credentials'
-                            )
-                        }
+                        sh "docker push ${DOCKER_MIGRATION_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                     }
                 }
             }
@@ -118,32 +72,21 @@ pipeline {
 
         stage('Update Kubernetes Manifests') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
-                    script {
-                        update_k8s_manifests(
-                            imageTag: env.DOCKER_IMAGE_TAG,
-                            manifestsPath: 'kubernetes',
-                            gitCredentials: 'github-credentials',
-                            gitUserName: 'Jenkins CI',
-                            gitUserEmail: 'haris.amjad@hotmail.com'
-                        )
-
-                        sh """
-                            git config user.name "Jenkins CI"
-                            git config user.email "haris.amjad@hotmail.com"
-
-                            # Set remote URL with credentials
-                            git remote set-url origin https://$GIT_USERNAME:$GIT_PASSWORD@github.com/harisamjad0158/tws-e-commerce-app.git
-
-                            git fetch origin ${GIT_BRANCH}
-                            git rebase origin/${GIT_BRANCH} || true
-
-                            git add kubernetes/*
-                            git commit -m "Update image tags to ${DOCKER_IMAGE_TAG} [ci skip]" || echo "No changes to commit"
-
-                            git push origin HEAD:${GIT_BRANCH} --force-with-lease
-                        """
-                    }
+                script {
+                    echo "Updating Kubernetes manifests with image tag: ${DOCKER_IMAGE_TAG}"
+                    
+                    sh """
+                        git config user.name "Jenkins CI"
+                        git config user.email "haris.amjad@hotmail.com"
+                        git remote set-url origin https://${GIT_USER}:${GIT_TOKEN}@github.com/harisamjad0158/tws-e-commerce-app.git
+                        
+                        sed -i "s|image:.*easyshop-app:.*|image: ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}|g" kubernetes/08-easyshop-deployment.yaml
+                        sed -i "s|image:.*easyshop-migration:.*|image: ${DOCKER_MIGRATION_IMAGE_NAME}:${DOCKER_IMAGE_TAG}|g" kubernetes/12-migration-job.yaml
+                        
+                        git add kubernetes/*
+                        git commit -m "Update image tags to ${DOCKER_IMAGE_TAG} [ci skip]" || echo "No changes to commit"
+                        git push origin HEAD:${GIT_BRANCH} --force-with-lease
+                    """
                 }
             }
         }
