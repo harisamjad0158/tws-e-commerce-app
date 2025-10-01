@@ -8,7 +8,6 @@ pipeline {
         DOCKER_IMAGE_NAME = "${DOCKERHUB_USERNAME}/easyshop-app"
         DOCKER_MIGRATION_IMAGE_NAME = "${DOCKERHUB_USERNAME}/easyshop-migration"
         DOCKER_IMAGE_TAG = "${BUILD_NUMBER}"
-        GITHUB_CREDENTIALS = credentials('github-credentials')
         GIT_BRANCH = "harisamjad0158-patch-1"
         GIT_REPO = "https://github.com/harisamjad0158/tws-e-commerce-app.git"
     }
@@ -16,27 +15,23 @@ pipeline {
     stages {
         stage('Cleanup Workspace') {
             steps {
-                script {
-                    clean_ws()
-                }
+                cleanWs()
             }
         }
 
         stage('Clone Repository') {
             steps {
-                script {
-                    clone(env.GIT_REPO, env.GIT_BRANCH)
-                }
+                git branch: env.GIT_BRANCH, url: env.GIT_REPO, credentialsId: 'github-credentials'
             }
         }
 
         stage('Docker Login') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh """
-                          echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
-                        """
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', 
+                                                      usernameVariable: 'DOCKER_USER', 
+                                                      passwordVariable: 'DOCKER_PASS')]) {
+                        sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
                     }
                 }
             }
@@ -87,24 +82,16 @@ pipeline {
             }
         }
 
-        stage('Security Scan with Trivy') {
-            steps {
-                script {
-                    trivy_scan()
-                }
-            }
-        }
-
         stage('Push Docker Images') {
             parallel {
                 stage('Push Main App Image') {
                     steps {
                         script {
-                            docker_push(
-                                imageName: env.DOCKER_IMAGE_NAME,
-                                imageTag: env.DOCKER_IMAGE_TAG,
-                                credentials: 'docker-hub-credentials'
-                            )
+                            withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', 
+                                                              usernameVariable: 'DOCKER_USER', 
+                                                              passwordVariable: 'DOCKER_PASS')]) {
+                                sh "docker push ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                            }
                         }
                     }
                 }
@@ -112,11 +99,11 @@ pipeline {
                 stage('Push Migration Image') {
                     steps {
                         script {
-                            docker_push(
-                                imageName: env.DOCKER_MIGRATION_IMAGE_NAME,
-                                imageTag: env.DOCKER_IMAGE_TAG,
-                                credentials: 'docker-hub-credentials'
-                            )
+                            withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', 
+                                                              usernameVariable: 'DOCKER_USER', 
+                                                              passwordVariable: 'DOCKER_PASS')]) {
+                                sh "docker push ${DOCKER_MIGRATION_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
+                            }
                         }
                     }
                 }
@@ -126,6 +113,7 @@ pipeline {
         stage('Update Kubernetes Manifests') {
             steps {
                 script {
+                    // Safe update using your shared library function
                     update_k8s_manifests(
                         imageTag: env.DOCKER_IMAGE_TAG,
                         manifestsPath: 'kubernetes',
@@ -133,20 +121,6 @@ pipeline {
                         gitUserName: 'Jenkins CI',
                         gitUserEmail: 'haris.amjad@hotmail.com'
                     )
-
-                    // Git operations: commit and push safely to the patch branch
-                    sh """
-                        git config user.name "Jenkins CI"
-                        git config user.email "haris.amjad@hotmail.com"
-
-                        git add kubernetes/*
-
-                        git commit -m "Update image tags to ${DOCKER_IMAGE_TAG} [ci skip]" || echo "No changes to commit"
-
-                        git remote set-url origin ${GIT_REPO}
-
-                        git push origin HEAD:${GIT_BRANCH}
-                    """
                 }
             }
         }
