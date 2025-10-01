@@ -21,15 +21,23 @@ pipeline {
 
         stage('Clone Repository') {
             steps {
-                git branch: env.GIT_BRANCH, url: env.GIT_REPO, credentialsId: 'github-credentials'
+                script {
+                    // If credentials exist, use them; otherwise clone without
+                    try {
+                        git branch: env.GIT_BRANCH, url: env.GIT_REPO, credentialsId: 'github-credentials'
+                    } catch (e) {
+                        echo "⚠️ GitHub credentials not found, cloning public repo without credentials..."
+                        git branch: env.GIT_BRANCH, url: env.GIT_REPO
+                    }
+                }
             }
         }
 
         stage('Docker Login') {
             steps {
                 script {
-                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', 
-                                                      usernameVariable: 'DOCKER_USER', 
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials',
+                                                      usernameVariable: 'DOCKER_USER',
                                                       passwordVariable: 'DOCKER_PASS')]) {
                         sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
                     }
@@ -95,8 +103,8 @@ pipeline {
                 stage('Push Main App Image') {
                     steps {
                         script {
-                            withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', 
-                                                              usernameVariable: 'DOCKER_USER', 
+                            withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials',
+                                                              usernameVariable: 'DOCKER_USER',
                                                               passwordVariable: 'DOCKER_PASS')]) {
                                 sh "docker push ${DOCKER_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                             }
@@ -107,8 +115,8 @@ pipeline {
                 stage('Push Migration Image') {
                     steps {
                         script {
-                            withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials', 
-                                                              usernameVariable: 'DOCKER_USER', 
+                            withCredentials([usernamePassword(credentialsId: 'docker-hub-credentials',
+                                                              usernameVariable: 'DOCKER_USER',
                                                               passwordVariable: 'DOCKER_PASS')]) {
                                 sh "docker push ${DOCKER_MIGRATION_IMAGE_NAME}:${DOCKER_IMAGE_TAG}"
                             }
