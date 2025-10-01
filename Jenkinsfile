@@ -67,6 +67,29 @@ pipeline {
             }
         }
 
+        stage('Run Unit Tests & Build') {
+            steps {
+                script {
+                    docker.image('node:18.17.0').inside('-u root') {
+                        sh '''
+                            npm config set cache $PWD/.npm-cache --global
+                            npm install --unsafe-perm
+                            npm run lint
+                            npm run build
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Security Scan with Trivy') {
+            steps {
+                script {
+                    trivy_scan()
+                }
+            }
+        }
+
         stage('Push Docker Images') {
             parallel {
                 stage('Push Main App Image') {
